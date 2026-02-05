@@ -5,6 +5,7 @@
 
 from datetime import datetime, timezone
 from parser import Article
+from translator import translate_titles
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +144,8 @@ def format_individual_posts_html(articles: list[Article]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 def format_markdown_report(articles: list[Article], channel_name: str = "") -> str:
-    """Генерирует полный Markdown-отчёт для сохранения в .md файл."""
+    """Генерирует полный Markdown-отчёт для сохранения в .md файл.
+    В конце — блок с заголовками на русском языке."""
     now = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
     lines = []
 
@@ -161,9 +163,17 @@ def format_markdown_report(articles: list[Article], channel_name: str = "") -> s
         lines.append("Новых публикаций за последние сутки не найдено.")
         return "\n".join(lines)
 
+    # Переводим все заголовки разом (быстрее, чем по одному)
+    print("  Перевод заголовков на русский...")
+    en_titles = [art.title for art in articles]
+    ru_titles = translate_titles(en_titles)
+
     for i, art in enumerate(articles, 1):
-        # Заголовок
-        lines.append(f"## {i}. {art.title}")
+        ru_title = ru_titles[i - 1] if i <= len(ru_titles) else art.title
+
+        # Заголовок на русском
+        lines.append(f"## {i}. {ru_title}")
+        lines.append(f"*{art.title}*")
         lines.append("")
 
         # Мета
@@ -186,7 +196,18 @@ def format_markdown_report(articles: list[Article], channel_name: str = "") -> s
         lines.append("---")
         lines.append("")
 
+    # === Блок: все заголовки на русском (для быстрого копирования в ТГ) ===
+    lines.append("## Заголовки на русском")
+    lines.append("")
+    for i, ru_t in enumerate(ru_titles, 1):
+        url = articles[i - 1].url if i <= len(articles) else ""
+        source = articles[i - 1].source if i <= len(articles) else ""
+        lines.append(f"{i}. **{ru_t}** — _{source}_ ([ссылка]({url}))")
+    lines.append("")
+
     # Подвал
+    lines.append("---")
+    lines.append("")
     lines.append("### Теги")
     lines.append("")
     lines.append("`#Эпштейн` `#EpsteinFiles` `#JeffreyEpstein` `#Новости`")
@@ -198,19 +219,25 @@ def format_markdown_report(articles: list[Article], channel_name: str = "") -> s
 
 
 def format_digest_markdown(articles: list[Article], channel_name: str = "") -> str:
-    """Короткий Markdown-дайджест — топ-5."""
+    """Короткий Markdown-дайджест — топ-5 с русскими заголовками."""
     now = datetime.now(timezone.utc).strftime("%d.%m.%Y")
     top = articles[:5]
     lines = []
+
+    print("  Перевод заголовков дайджеста на русский...")
+    en_titles = [art.title for art in top]
+    ru_titles = translate_titles(en_titles)
 
     lines.append(f"# Эпштейн: дайджест дня — {now}")
     lines.append("")
 
     for i, art in enumerate(top, 1):
+        ru_title = ru_titles[i - 1] if i <= len(ru_titles) else art.title
         date_str = ""
         if art.published:
             date_str = f" ({art.published.strftime('%d.%m %H:%M')})"
-        lines.append(f"{i}. [{art.title}]({art.url}) — *{art.source}*{date_str}")
+        lines.append(f"{i}. **{ru_title}** — *{art.source}*{date_str}")
+        lines.append(f"   [{art.title}]({art.url})")
 
     lines.append("")
     lines.append(f"Всего найдено: **{len(articles)}** статей")
