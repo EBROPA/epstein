@@ -7,7 +7,7 @@ import json
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 from urllib.parse import urlparse
@@ -307,12 +307,30 @@ def parse_courtlistener() -> list[Article]:
 # Главная функция сбора
 # ---------------------------------------------------------------------------
 
-def collect_all(skip_seen: bool = True) -> list[Article]:
-    """Собираем новости из всех источников, дедуплицируем и сортируем."""
+def _is_fresh(article: Article, max_age_hours: int) -> bool:
+    """Проверяем, что статья не старше max_age_hours часов."""
+    if not article.published:
+        # Без даты — пропускаем (не можем гарантировать свежесть)
+        return False
+    now = datetime.now(timezone.utc)
+    pub = article.published
+    # Если дата naive — считаем UTC
+    if pub.tzinfo is None:
+        pub = pub.replace(tzinfo=timezone.utc)
+    age = now - pub
+    return age <= timedelta(hours=max_age_hours)
+
+
+def collect_all(skip_seen: bool = True, max_age_hours: int = None) -> list[Article]:
+    """Собираем новости из всех источников, фильтруем по свежести, дедуплицируем."""
+    if max_age_hours is None:
+        max_age_hours = config.MAX_AGE_HOURS
+
     seen = _load_seen_urls() if skip_seen else set()
     all_articles: list[Article] = []
 
     print("\n=== Сбор новостей об Эпштейне ===\n")
+    print(f"    Фильтр: только за последние {max_age_hours}ч\n")
 
     # 1. RSS-фиды
     print("[1/3] RSS-фиды крупных СМИ...")
@@ -326,9 +344,15 @@ def collect_all(skip_seen: bool = True) -> list[Article]:
     print("\n[3/3] CourtListener (судебные документы)...")
     all_articles.extend(parse_courtlistener())
 
+    # Фильтр по свежести
+    fresh = [a for a in all_articles if _is_fresh(a, max_age_hours)]
+    stale_count = len(all_articles) - len(fresh)
+    if stale_count:
+        print(f"\n  Отфильтровано старых статей: {stale_count}")
+
     # Дедупликация
     unique: dict[str, Article] = {}
-    for art in all_articles:
+    for art in fresh:
         norm = _normalize_url(art.url)
         if norm in seen:
             continue
@@ -338,12 +362,12 @@ def collect_all(skip_seen: bool = True) -> list[Article]:
         else:
             unique[norm] = art
 
-    # Сортировка: сначала по релевантности, потом по дате (новые первее)
+    # Сортировка: сначала по дате (самые свежие), потом по релевантности
     result = sorted(
         unique.values(),
         key=lambda a: (
-            -a.relevance_score,
             -(a.published.timestamp() if a.published else 0),
+            -a.relevance_score,
         ),
     )
 
@@ -355,5 +379,5 @@ def collect_all(skip_seen: bool = True) -> list[Article]:
         seen.add(_normalize_url(art.url))
     _save_seen_urls(seen)
 
-    print(f"\n=== Найдено {len(result)} релевантных статей ===\n")
+    print(f"\n=== Найдено {len(result)} свежих статей (за {max_age_hours}ч) ===\n")
     return result

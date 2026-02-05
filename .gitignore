@@ -7,5 +7,6 @@ output_post.txt
 output_post.html
 output_digest.html
 output.json
+report.md
 venv/
 .venv/

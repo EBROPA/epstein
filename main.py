@@ -3,14 +3,15 @@
 Epstein News Parser — сбор свежих новостей о деле Эпштейна для Telegram-канала.
 
 Использование:
-    python main.py                  # Полный сбор + вывод дайджеста
-    python main.py --full           # Полный пост со всеми статьями
-    python main.py --digest         # Короткий дайджест (топ-5)
-    python main.py --individual     # Отдельные посты для каждой новости
+    python main.py                  # Markdown-отчёт (по умолчанию) → report.md
+    python main.py --digest         # Короткий дайджест .md (топ-5)
+    python main.py --full           # Полный HTML-пост для Telegram
+    python main.py --individual     # Отдельные HTML-посты
     python main.py --plain          # Простой текст
+    python main.py --json           # JSON-вывод
+    python main.py --hours 12       # Только за последние 12 часов
     python main.py --all-new        # Не пропускать ранее найденные
-    python main.py --channel @name  # Указать имя канала для подвала
-    python main.py --json           # Вывести сырые данные в JSON
+    python main.py --channel @name  # Указать имя канала
 """
 
 import argparse
@@ -24,34 +25,49 @@ from formatter import (
     format_digest_html,
     format_plain_text,
     format_individual_posts_html,
+    format_markdown_report,
+    format_digest_markdown,
 )
 import config
 
 
 def main():
     ap = argparse.ArgumentParser(
-        description="Парсер новостей о деле Эпштейна для Telegram-канала"
+        description="Парсер свежих новостей о деле Эпштейна для Telegram-канала"
     )
     ap.add_argument("--full", action="store_true", help="Полный HTML-пост")
     ap.add_argument("--digest", action="store_true", help="Короткий дайджест (топ-5)")
-    ap.add_argument("--individual", action="store_true", help="Отдельные посты")
+    ap.add_argument("--individual", action="store_true", help="Отдельные HTML-посты")
     ap.add_argument("--plain", action="store_true", help="Простой текст")
     ap.add_argument("--json", action="store_true", help="JSON-вывод")
     ap.add_argument("--all-new", action="store_true", help="Игнорировать кэш seen_urls")
+    ap.add_argument("--hours", type=int, default=config.MAX_AGE_HOURS,
+                     help=f"Максимальный возраст статей в часах (по умолчанию {config.MAX_AGE_HOURS})")
     ap.add_argument("--channel", type=str, default="", help="Имя TG-канала (напр. @epstein_news)")
-    ap.add_argument("--save", action="store_true", help="Сохранить результат в файлы")
     args = ap.parse_args()
 
-    # Если ни один формат не выбран — по умолчанию дайджест + full
-    if not any([args.full, args.digest, args.individual, args.plain, args.json]):
-        args.digest = True
-        args.full = True
+    # Если ни один формат не выбран — по умолчанию Markdown-отчёт
+    explicit_format = any([args.full, args.digest, args.individual, args.plain, args.json])
 
-    # Сбор новостей
-    articles = collect_all(skip_seen=not args.all_new)
+    # Сбор новостей (с фильтром по свежести)
+    articles = collect_all(skip_seen=not args.all_new, max_age_hours=args.hours)
 
     if not articles:
-        print("\nНовых статей не найдено. Попробуйте --all-new или подождите обновлений.")
+        print(f"\nНовых статей за последние {args.hours}ч не найдено.")
+        print("Попробуйте --hours 48 или --all-new")
+        # Создаём пустой отчёт
+        if not explicit_format:
+            md = format_markdown_report([], channel_name=args.channel)
+            Path(config.OUTPUT_MD_FILE).write_text(md, encoding="utf-8")
+            print(f"\n[Пустой отчёт сохранён в {config.OUTPUT_MD_FILE}]")
+        return
+
+    # --- Markdown-отчёт (по умолчанию, всегда сохраняется) ---
+    if not explicit_format:
+        md = format_markdown_report(articles, channel_name=args.channel)
+        Path(config.OUTPUT_MD_FILE).write_text(md, encoding="utf-8")
+        print(f"[Отчёт сохранён в {config.OUTPUT_MD_FILE}]")
+        print("\n" + md)
         return
 
     # JSON
@@ -59,32 +75,25 @@ def main():
         data = [a.to_dict() for a in articles]
         output = json.dumps(data, ensure_ascii=False, indent=2)
         print(output)
-        if args.save:
-            Path("output.json").write_text(output, encoding="utf-8")
-            print("\n[Сохранено в output.json]")
+        Path("output.json").write_text(output, encoding="utf-8")
         return
 
-    # Дайджест
+    # Дайджест (.md)
     if args.digest:
-        post = format_digest_html(articles, channel_name=args.channel)
-        print("\n" + "=" * 50)
-        print("ДАЙДЖЕСТ (HTML для Telegram):")
-        print("=" * 50)
-        print(post)
-        if args.save:
-            Path("output_digest.html").write_text(post, encoding="utf-8")
-            print("\n[Сохранено в output_digest.html]")
+        md = format_digest_markdown(articles, channel_name=args.channel)
+        Path(config.OUTPUT_MD_FILE).write_text(md, encoding="utf-8")
+        print(f"[Дайджест сохранён в {config.OUTPUT_MD_FILE}]")
+        print("\n" + md)
 
-    # Полный пост
+    # Полный HTML-пост
     if args.full:
         post = format_telegram_html(articles, channel_name=args.channel)
         print("\n" + "=" * 50)
         print("ПОЛНЫЙ ПОСТ (HTML для Telegram):")
         print("=" * 50)
         print(post)
-        if args.save:
-            Path(config.OUTPUT_HTML_FILE).write_text(post, encoding="utf-8")
-            print(f"\n[Сохранено в {config.OUTPUT_HTML_FILE}]")
+        Path(config.OUTPUT_HTML_FILE).write_text(post, encoding="utf-8")
+        print(f"\n[Сохранено в {config.OUTPUT_HTML_FILE}]")
 
     # Отдельные посты
     if args.individual:
@@ -99,13 +108,14 @@ def main():
     # Plain text
     if args.plain:
         text = format_plain_text(articles)
-        print("\n" + "=" * 50)
-        print("PLAIN TEXT:")
-        print("=" * 50)
-        print(text)
-        if args.save:
-            Path(config.OUTPUT_FILE).write_text(text, encoding="utf-8")
-            print(f"\n[Сохранено в {config.OUTPUT_FILE}]")
+        print("\n" + text)
+        Path(config.OUTPUT_FILE).write_text(text, encoding="utf-8")
+        print(f"\n[Сохранено в {config.OUTPUT_FILE}]")
+
+    # Всегда сохраняем .md отчёт дополнительно
+    md = format_markdown_report(articles, channel_name=args.channel)
+    Path(config.OUTPUT_MD_FILE).write_text(md, encoding="utf-8")
+    print(f"\n[MD-отчёт сохранён в {config.OUTPUT_MD_FILE}]")
 
 
 if __name__ == "__main__":
