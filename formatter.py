@@ -139,6 +139,90 @@ def format_individual_posts_html(articles: list[Article]) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Markdown-отчёт (.md)
+# ---------------------------------------------------------------------------
+
+def format_markdown_report(articles: list[Article], channel_name: str = "") -> str:
+    """Генерирует полный Markdown-отчёт для сохранения в .md файл."""
+    now = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+    lines = []
+
+    lines.append(f"# Дело Эпштейна — свежие новости")
+    lines.append("")
+    lines.append(f"> Отчёт сгенерирован: **{now}**")
+    if channel_name:
+        lines.append(f"> Канал: **{channel_name}**")
+    lines.append(f"> Найдено статей: **{len(articles)}**")
+    lines.append("")
+    lines.append("---")
+    lines.append("")
+
+    if not articles:
+        lines.append("Новых публикаций за последние сутки не найдено.")
+        return "\n".join(lines)
+
+    for i, art in enumerate(articles, 1):
+        # Заголовок
+        lines.append(f"## {i}. {art.title}")
+        lines.append("")
+
+        # Мета
+        meta_parts = []
+        if art.published:
+            meta_parts.append(f"**Дата:** {art.published.strftime('%d.%m.%Y %H:%M')}")
+        meta_parts.append(f"**Источник:** {art.source}")
+        meta_parts.append(f"**Релевантность:** {art.relevance_score} ({', '.join(art.keywords_found)})")
+        lines.append(" | ".join(meta_parts))
+        lines.append("")
+
+        # Описание
+        if art.summary:
+            lines.append(art.summary)
+            lines.append("")
+
+        # Ссылка
+        lines.append(f"[Читать полностью]({art.url})")
+        lines.append("")
+        lines.append("---")
+        lines.append("")
+
+    # Подвал
+    lines.append("### Теги")
+    lines.append("")
+    lines.append("`#Эпштейн` `#EpsteinFiles` `#JeffreyEpstein` `#Новости`")
+    if channel_name:
+        lines.append("")
+        lines.append(f"**Подписывайтесь:** {channel_name}")
+
+    return "\n".join(lines)
+
+
+def format_digest_markdown(articles: list[Article], channel_name: str = "") -> str:
+    """Короткий Markdown-дайджест — топ-5."""
+    now = datetime.now(timezone.utc).strftime("%d.%m.%Y")
+    top = articles[:5]
+    lines = []
+
+    lines.append(f"# Эпштейн: дайджест дня — {now}")
+    lines.append("")
+
+    for i, art in enumerate(top, 1):
+        date_str = ""
+        if art.published:
+            date_str = f" ({art.published.strftime('%d.%m %H:%M')})"
+        lines.append(f"{i}. [{art.title}]({art.url}) — *{art.source}*{date_str}")
+
+    lines.append("")
+    lines.append(f"Всего найдено: **{len(articles)}** статей")
+
+    if channel_name:
+        lines.append("")
+        lines.append(f"**Подписывайтесь:** {channel_name}")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
 # Утилиты
 # ---------------------------------------------------------------------------
 

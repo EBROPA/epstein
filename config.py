@@ -53,12 +53,17 @@ SCRAPE_SOURCES = [
     },
     {
         "name": "Google News — Epstein",
-        "url": "https://news.google.com/rss/search?q=epstein+files&hl=en-US&gl=US&ceid=US:en",
+        "url": "https://news.google.com/rss/search?q=epstein+files+when:1d&hl=en-US&gl=US&ceid=US:en",
         "type": "google_news_rss",
     },
     {
         "name": "Google News — Epstein documents",
-        "url": "https://news.google.com/rss/search?q=epstein+documents+unsealed&hl=en-US&gl=US&ceid=US:en",
+        "url": "https://news.google.com/rss/search?q=epstein+documents+unsealed+when:1d&hl=en-US&gl=US&ceid=US:en",
+        "type": "google_news_rss",
+    },
+    {
+        "name": "Google News — Epstein latest",
+        "url": "https://news.google.com/rss/search?q=jeffrey+epstein+when:1d&hl=en-US&gl=US&ceid=US:en",
         "type": "google_news_rss",
     },
 ]
@@ -77,12 +82,16 @@ REQUEST_HEADERS = {
 # Таймаут запросов (секунды)
 REQUEST_TIMEOUT = 15
 
+# Максимальный возраст статьи в часах (по умолчанию 24ч — только за последние сутки)
+MAX_AGE_HOURS = 24
+
 # Максимальное кол-во статей в итоговой подборке
 MAX_ARTICLES = 20
 
 # Файл для хранения уже обработанных ссылок (дедупликация)
 SEEN_URLS_FILE = "seen_urls.json"
 
-# Файл с результатами
+# Файлы с результатами
 OUTPUT_FILE = "output_post.txt"
 OUTPUT_HTML_FILE = "output_post.html"
+OUTPUT_MD_FILE = "report.md"
